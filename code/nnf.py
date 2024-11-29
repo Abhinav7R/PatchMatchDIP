@@ -16,7 +16,6 @@ import random
 
 INF = np.inf
 
-
 class NNF:
     def __init__(self, a, b, patch_w=7, pm_iters=5, rs_max=INF):
         """
@@ -32,16 +31,13 @@ class NNF:
         self.pm_iters = pm_iters
         self.rs_max = rs_max
         
+        # Convert to int32 for precise calculations
+        self.a = a.astype(np.int32)
+        self.b = b.astype(np.int32)
+
         # Get height and width of the images
         self.ah, self.aw = a.shape[0], a.shape[1]
         self.bh, self.bw = b.shape[0], b.shape[1]
-
-        # Convert to 24 bit integer with 8 bit per channel (0-255) in the order of BGR
-        # self.a = a.astype(np.int32)
-        # self.b = b.astype(np.int32)
-
-        self.a = self.image_to_int(a)
-        self.b = self.image_to_int(b)
 
         # effective width and height (possible upper left corners of patches)
         self.aeh = self.ah - self.patch_w + 1
@@ -54,20 +50,6 @@ class NNF:
         self.nnf_dist = np.zeros((a.shape[0], a.shape[1]), dtype=np.int32)
         
         self.initialize_nnf()
-
-    def image_to_int(self, image):
-        """
-        Convert image to 24 bit integer with 8 bit per channel (0-255) in the order of BGR
-        """
-        img = np.zeros((image.shape[0], image.shape[1]))
-        img = img.astype(np.int32)
-
-        for i in range(image.shape[0]):
-            for j in range(image.shape[1]):
-                # use bitwise shift to convert to 24 bit integer
-                img[i, j] = (image[i, j, 0] << 16) + (image[i, j, 1] << 8) + image[i, j, 2]
-
-        return img
 
     def initialize_nnf(self):
         """
@@ -86,12 +68,7 @@ class NNF:
         """
         patch_a = self.a[ay:ay + self.patch_w, ax:ax + self.patch_w]
         patch_b = self.b[by:by + self.patch_w, bx:bx + self.patch_w]
-        # ans = np.sum((patch_a - patch_b) ** 2)
-
-        blue = (patch_a & 255) - (patch_b & 255)
-        green = ((patch_a >> 8) & 255) - ((patch_b >> 8) & 255)
-        red = ((patch_a >> 16) & 255) - ((patch_b >> 16) & 255)
-        ans = np.sum(blue ** 2 + green ** 2 + red ** 2)
+        ans = np.sum((patch_a - patch_b) ** 2)
 
         return ans
     
