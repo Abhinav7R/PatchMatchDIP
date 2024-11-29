@@ -14,11 +14,11 @@ from time import time
 import numpy as np
 import random
 
-INT_MAX = 2147483647
+INF = np.inf
 
 
 class NNF:
-    def __init__(self, a, b, patch_w=7, pm_iters=5, rs_max=INT_MAX):
+    def __init__(self, a, b, patch_w=7, pm_iters=5, rs_max=INF):
         """
         Initialize the NNF class
         Parameters:
@@ -26,7 +26,7 @@ class NNF:
         - b: the second image (numpy array, shape: h x w x 3)
         - patch_w: width of the patch (default: 7)
         - pm_iters: number of PatchMatch iterations (default: 5)
-        - rs_max: maximum search radius for random search (default: INT_MAX)
+        - rs_max: maximum search radius for random search (default: INF)
         """
         self.patch_w = patch_w
         self.pm_iters = pm_iters
@@ -63,13 +63,40 @@ class NNF:
                 self.nnf[ay, ax] = (bx, by)
                 self.nnf_dist[ay, ax] = self.patch_distance(ax, ay, bx, by)
 
-    def patch_distance(self, ax, ay, bx, by):
+    def patch_distance(self, ax, ay, bx, by, cutoff=INF):
         """
         Measure distance between 2 patches with upper left corners (ax, ay) and (bx, by), terminating early if we exceed a cutoff distance.
         """
+
+        # NOTE: M2 and M3 are super slow compared to M1 
+
+        # M1
         patch_a = self.a[ay:ay + self.patch_w, ax:ax + self.patch_w]
         patch_b = self.b[by:by + self.patch_w, bx:bx + self.patch_w]
         ans = np.sum((patch_a - patch_b) ** 2)
+
+        # M2
+        # ans = 0
+        # for dy in range(self.patch_w):
+        #     for dx in range(self.patch_w):
+        #         ay_p = ay + dy
+        #         ax_p = ax + dx
+        #         by_p = by + dy
+        #         bx_p = bx + dx
+        #         diff = self.a[ay_p, ax_p] - self.b[by_p, bx_p]
+        #         ans += np.sum(diff ** 2)
+        #         if ans > cutoff:
+        #             return cutoff
+
+        # M3
+        # patch_a = self.a[ay:ay + self.patch_w, ax:ax + self.patch_w]
+        # patch_b = self.b[by:by + self.patch_w, bx:bx + self.patch_w]
+        # diff = (patch_a - patch_b) ** 2
+        # ans = 0
+        # for val in np.nditer(diff):
+        #     ans += val
+        #     if ans > cutoff:
+        #         return cutoff
 
         return ans
     
@@ -77,7 +104,7 @@ class NNF:
         """
         Improve the current guess if a better match is found.
         """
-        d = self.patch_distance(ax, ay, bx_new, by_new)
+        d = self.patch_distance(ax, ay, bx_new, by_new, d_best)
         if d < d_best:
             self.nnf[ay, ax] = (bx_new, by_new)
             self.nnf_dist[ay, ax] = d
@@ -87,7 +114,7 @@ class NNF:
         Perform propagation step
         """
         # current best guess
-        x_best, y_best = self.nnf[ay, ax]
+        # x_best, y_best = self.nnf[ay, ax]
         d_best = self.nnf_dist[ay, ax]
 
         if 0 <= ax - x_change < self.aew:
