@@ -153,7 +153,7 @@ class NNF:
             for ay in range(y_start, y_end, y_change):
                 for ax in range(x_start, x_end, x_change):
                     self.propagate(iter_num, ax, ay, x_change, y_change)
-                    # self.random_search(ax, ay)
+                    self.random_search(ax, ay)
 
             t_end = time()
             print("Iteration %d done in %f seconds" % (iter_num, t_end - t_start))
