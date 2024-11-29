@@ -32,13 +32,16 @@ class NNF:
         self.pm_iters = pm_iters
         self.rs_max = rs_max
         
-        # Convert to int32 for precise calculations
-        self.a = a.astype(np.int32)
-        self.b = b.astype(np.int32)
-
         # Get height and width of the images
         self.ah, self.aw = a.shape[0], a.shape[1]
         self.bh, self.bw = b.shape[0], b.shape[1]
+
+        # Convert to 24 bit integer with 8 bit per channel (0-255) in the order of BGR
+        # self.a = a.astype(np.int32)
+        # self.b = b.astype(np.int32)
+
+        self.a = self.image_to_int(a)
+        self.b = self.image_to_int(b)
 
         # effective width and height (possible upper left corners of patches)
         self.aeh = self.ah - self.patch_w + 1
@@ -52,6 +55,20 @@ class NNF:
         
         self.initialize_nnf()
 
+    def image_to_int(self, image):
+        """
+        Convert image to 24 bit integer with 8 bit per channel (0-255) in the order of BGR
+        """
+        img = np.zeros((image.shape[0], image.shape[1]))
+        img = img.astype(np.int32)
+
+        for i in range(image.shape[0]):
+            for j in range(image.shape[1]):
+                # use bitwise shift to convert to 24 bit integer
+                img[i, j] = (image[i, j, 0] << 16) + (image[i, j, 1] << 8) + image[i, j, 2]
+
+        return img
+
     def initialize_nnf(self):
         """
         Initialize the NNF with random coordinates and calculate initial distances
@@ -63,40 +80,18 @@ class NNF:
                 self.nnf[ay, ax] = (bx, by)
                 self.nnf_dist[ay, ax] = self.patch_distance(ax, ay, bx, by)
 
-    def patch_distance(self, ax, ay, bx, by, cutoff=INF):
+    def patch_distance(self, ax, ay, bx, by):
         """
-        Measure distance between 2 patches with upper left corners (ax, ay) and (bx, by), terminating early if we exceed a cutoff distance.
+        Measure distance between 2 patches with upper left corners (ax, ay) and (bx, by)
         """
-
-        # NOTE: M2 and M3 are super slow compared to M1 
-
-        # M1
         patch_a = self.a[ay:ay + self.patch_w, ax:ax + self.patch_w]
         patch_b = self.b[by:by + self.patch_w, bx:bx + self.patch_w]
-        ans = np.sum((patch_a - patch_b) ** 2)
+        # ans = np.sum((patch_a - patch_b) ** 2)
 
-        # M2
-        # ans = 0
-        # for dy in range(self.patch_w):
-        #     for dx in range(self.patch_w):
-        #         ay_p = ay + dy
-        #         ax_p = ax + dx
-        #         by_p = by + dy
-        #         bx_p = bx + dx
-        #         diff = self.a[ay_p, ax_p] - self.b[by_p, bx_p]
-        #         ans += np.sum(diff ** 2)
-        #         if ans > cutoff:
-        #             return cutoff
-
-        # M3
-        # patch_a = self.a[ay:ay + self.patch_w, ax:ax + self.patch_w]
-        # patch_b = self.b[by:by + self.patch_w, bx:bx + self.patch_w]
-        # diff = (patch_a - patch_b) ** 2
-        # ans = 0
-        # for val in np.nditer(diff):
-        #     ans += val
-        #     if ans > cutoff:
-        #         return cutoff
+        blue = (patch_a & 255) - (patch_b & 255)
+        green = ((patch_a >> 8) & 255) - ((patch_b >> 8) & 255)
+        red = ((patch_a >> 16) & 255) - ((patch_b >> 16) & 255)
+        ans = np.sum(blue ** 2 + green ** 2 + red ** 2)
 
         return ans
     
@@ -104,7 +99,7 @@ class NNF:
         """
         Improve the current guess if a better match is found.
         """
-        d = self.patch_distance(ax, ay, bx_new, by_new, d_best)
+        d = self.patch_distance(ax, ay, bx_new, by_new)
         if d < d_best:
             self.nnf[ay, ax] = (bx_new, by_new)
             self.nnf_dist[ay, ax] = d
