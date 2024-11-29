@@ -12,12 +12,13 @@ Output: NNF (nearest neighbor field)
 
 from time import time
 import numpy as np
+import cv2
 import random
 
 INF = np.inf
 
 class NNF:
-    def __init__(self, a, b, patch_w=7, pm_iters=5, rs_max=INF):
+    def __init__(self, a, b, patch_w=7, pm_iters=5, rs_max=INF, nnf_init="Random"):
         """
         Initialize the NNF class
         Parameters:
@@ -26,18 +27,31 @@ class NNF:
         - patch_w: width of the patch (default: 7)
         - pm_iters: number of PatchMatch iterations (default: 5)
         - rs_max: maximum search radius for random search (default: INF)
+        - nnf_init: initialization method for NNF (default: "Random")
+                    for mask and other NNF initialization, call the respective intialization functions
         """
         self.patch_w = patch_w
         self.pm_iters = pm_iters
         self.rs_max = rs_max
+        self.nnf_init = nnf_init
         
         # Convert to int32 for precise calculations
         self.a = a.astype(np.int32)
         self.b = b.astype(np.int32)
 
+        self._set_height_width()
+        
+        # Initialize NNF and distances with zeros
+        self.nnf = np.zeros((self.a.shape[0], self.a.shape[1], 2), dtype=np.int32)
+        self.nnf_dist = np.zeros((self.a.shape[0], self.a.shape[1]), dtype=np.int32)
+        
+        if self.nnf_init == "Random":
+            self.initialize_nnf()
+
+    def _set_height_width(self):
         # Get height and width of the images
-        self.ah, self.aw = a.shape[0], a.shape[1]
-        self.bh, self.bw = b.shape[0], b.shape[1]
+        self.ah, self.aw = self.a.shape[0], self.a.shape[1]
+        self.bh, self.bw = self.b.shape[0], self.b.shape[1]
 
         # effective width and height (possible upper left corners of patches)
         self.aeh = self.ah - self.patch_w + 1
@@ -45,12 +59,6 @@ class NNF:
         self.beh = self.bh - self.patch_w + 1
         self.bew = self.bw - self.patch_w + 1  
         
-        # Initialize NNF and distances with zeros
-        self.nnf = np.zeros((a.shape[0], a.shape[1], 2), dtype=np.int32)
-        self.nnf_dist = np.zeros((a.shape[0], a.shape[1]), dtype=np.int32)
-        
-        self.initialize_nnf()
-
     def initialize_nnf(self):
         """
         Initialize the NNF with random coordinates and calculate initial distances
@@ -61,6 +69,36 @@ class NNF:
                 by = random.randint(0, self.beh - 1)
                 self.nnf[ay, ax] = (bx, by)
                 self.nnf_dist[ay, ax] = self.patch_distance(ax, ay, bx, by)
+                
+    def initialize_nnf_with_other_nnf(self, other_nnf):
+        """
+        Initialize the NNF with another NNF and calculate initial distances
+        """
+        # upsample the other NNF by 2 using cv2.resize
+        other_nnf = other_nnf.astype(np.float32)
+        other_nnf_upsampled = cv2.resize(other_nnf, (self.aw, self.ah))
+        other_nnf_upsampled = other_nnf_upsampled.astype(np.int32)
+        self.nnf = other_nnf_upsampled.copy()
+        for ay in range(self.aeh):
+            for ax in range(self.aew):
+                bx, by = other_nnf_upsampled[ay, ax]
+                self.nnf_dist[ay, ax] = self.patch_distance(ax, ay, bx, by)
+    
+    def initialize_nnf_with_mask(self, mask):
+        """
+        Initialize the NNF with a mask. 0 is for the pixels that need to be inpainted (mask), 1 is for the pixels that are known
+        """
+        for ay in range(self.aeh):
+            for ax in range(self.aew):
+                if mask[ay, ax] == 0:
+                    bx = random.randint(0, self.bew - 1)
+                    by = random.randint(0, self.beh - 1)
+                    self.nnf[ay, ax] = (bx, by)
+                    self.nnf_dist[ay, ax] = self.patch_distance(ax, ay, bx, by)
+                else:
+                    self.nnf[ay, ax] = (ax, ay)
+                    self.nnf_dist[ay, ax] = 0
+    
 
     def patch_distance(self, ax, ay, bx, by):
         """
@@ -155,7 +193,7 @@ class NNF:
                     self.random_search(ax, ay)
 
             t_end = time()
-            print("Iteration %d done in %f seconds" % (iter_num, t_end - t_start))
+            # print("Iteration %d done in %f seconds" % (iter_num, t_end - t_start))
         return self.nnf, self.nnf_dist
 
 
