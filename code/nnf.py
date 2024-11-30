@@ -5,9 +5,11 @@ This class is used to compute the nearest neighbor field (NNF)
 Input: 2 images
 Output: NNF (nearest neighbor field) 
 1. a 2D array of size (h, w, 2) where h and w are the height and width of the image
-- NNF[i, j] = (x, y) where (x, y) is the coordinate of the nearest neighbor of pixel (i, j) in the other image
+- NNF[i, j] = (y, x) where (y, x) is the coordinate of the nearest neighbor of pixel (i, j) in the other image
 2. a 2D array of size (h, w) where h and w are the height and width of the image
 - NNF[i, j] = d where d is the distance (rgb squared distance) between pixel (i, j) and its nearest neighbor in the other image
+
+NOTE: All coordinates are in (y, x) - height, width format
 """
 
 from time import time
@@ -44,7 +46,8 @@ class NNF:
         self.mask_a = mask_a
         self.mask_b = mask_b
 
-        self._set_height_width()
+        self.ah, self.aw = self.a.shape[0], self.a.shape[1]
+        self.bh, self.bw = self.b.shape[0], self.b.shape[1]
         
         # Initialize NNF and distances with zeros
         self.nnf = np.zeros((self.a.shape[0], self.a.shape[1], 2), dtype=np.int32)
@@ -53,27 +56,27 @@ class NNF:
         if self.nnf_init == "Random":
             self.initialize_nnf()
 
-    def _set_height_width(self):
-        # Get height and width of the images
-        self.ah, self.aw = self.a.shape[0], self.a.shape[1]
-        self.bh, self.bw = self.b.shape[0], self.b.shape[1]
-
-        # effective width and height (possible upper left corners of patches)
-        self.aeh = self.ah - self.patch_w + 1
-        self.aew = self.aw - self.patch_w + 1
-        self.beh = self.bh - self.patch_w + 1
-        self.bew = self.bw - self.patch_w + 1  
+    def _in_border(self, ax, ay):
+        """
+        Check if the pixel is in the border
+        """
+        return ax < self.patch_w // 2 or ax >= self.aw - self.patch_w // 2 or ay < self.patch_w // 2 or ay >= self.ah - self.patch_w // 2
         
     def initialize_nnf(self):
         """
         Initialize the NNF with random coordinates and calculate initial distances
         """
-        for ay in range(self.aeh):
-            for ax in range(self.aew):
-                bx = random.randint(0, self.bew - 1)
-                by = random.randint(0, self.beh - 1)
-                self.nnf[ay, ax] = (bx, by)
-                self.nnf_dist[ay, ax] = self.patch_distance(ax, ay, bx, by)
+        for ay in range(self.ah):
+            for ax in range(self.aw):
+                # patch_w/2 from all sides to avoid out of bounds
+                if self._in_border(ax, ay):
+                    self.nnf[ay, ax] = (ay, ax)
+                    self.nnf_dist[ay, ax] = 0
+                else:
+                    bx = random.randint(0, self.bw - 1)
+                    by = random.randint(0, self.bh - 1)
+                    self.nnf[ay, ax] = (by, bx)
+                    self.nnf_dist[ay, ax] = self.patch_distance(ax, ay, bx, by)
                 
     def initialize_nnf_with_other_nnf(self, other_nnf):
         """
@@ -84,40 +87,47 @@ class NNF:
         other_nnf_upsampled = cv2.resize(other_nnf, (self.aw, self.ah))
         other_nnf_upsampled = other_nnf_upsampled.astype(np.int32)
         self.nnf = other_nnf_upsampled.copy()
-        for ay in range(self.aeh):
-            for ax in range(self.aew):
-                bx, by = other_nnf_upsampled[ay, ax]
-                self.nnf_dist[ay, ax] = self.patch_distance(ax, ay, bx, by)
+        for ay in range(self.ah):
+            for ax in range(self.aw):
+                if self._in_border(ax, ay):
+                    self.nnf[ay, ax] = (ay, ax)
+                    self.nnf_dist[ay, ax] = 0
+                else:
+                    by, bx = other_nnf_upsampled[ay, ax]
+                    self.nnf_dist[ay, ax] = self.patch_distance(ax, ay, bx, by)
     
     def initialize_nnf_with_mask(self, mask):
         """
         Initialize the NNF with a mask. 0 is for the pixels that need to be inpainted (mask), 1 is for the pixels that are known
         """
-        for ay in range(self.aeh):
-            for ax in range(self.aew):
-                if mask[ay, ax] == 0:
-                    bx = random.randint(0, self.bew - 1)
-                    by = random.randint(0, self.beh - 1)
-                    self.nnf[ay, ax] = (bx, by)
+        for ay in range(self.ah):
+            for ax in range(self.aw):
+                if mask[ay, ax] == 0 and not self._in_border(ax, ay):
+                    bx = random.randint(0, self.bw - 1)
+                    by = random.randint(0, self.bh - 1)
+                    self.nnf[ay, ax] = (by, bx)
                     self.nnf_dist[ay, ax] = self.patch_distance(ax, ay, bx, by)
                 else:
-                    self.nnf[ay, ax] = (ax, ay)
+                    self.nnf[ay, ax] = (ay, ax)
                     self.nnf_dist[ay, ax] = 0
     
 
     def patch_distance(self, ax, ay, bx, by):
         """
-        Measure distance between 2 patches with upper left corners (ax, ay) and (bx, by)
+        Measure distance between 2 patches with center at (ay, ax) and (by, bx)
         """
-        patch_a = self.a[ay:ay + self.patch_w, ax:ax + self.patch_w]
-        patch_b = self.b[by:by + self.patch_w, bx:bx + self.patch_w]
+        if self._in_border(ax, ay) or self._in_border(bx, by):
+            return self.MAX_PATCH_DIFF
+        patch_a = self.a[ay - self.patch_w // 2:ay + self.patch_w // 2 + 1, ax - self.patch_w // 2:ax + self.patch_w // 2 + 1]
+        patch_b = self.b[by - self.patch_w // 2:by + self.patch_w // 2 + 1, bx - self.patch_w // 2:bx + self.patch_w // 2 + 1]
+        
         ssd = np.sum((patch_a - patch_b) ** 2, axis=2)
         if self.mask_a is not None:
-            mask_patch_a = self.mask_a[ay:ay + self.patch_w, ax:ax + self.patch_w]
+            mask_patch_a = self.mask_a[ay - self.patch_w // 2:ay + self.patch_w // 2 + 1, ax - self.patch_w // 2:ax + self.patch_w // 2 + 1]
             ssd = np.where(mask_patch_a == 0, self.MAX_RGB_DIFF, ssd)
 
         if self.mask_b is not None:
-            mask_patch_b = self.mask_b[by:by + self.patch_w, bx:bx + self.patch_w]
+            mask_patch_b = self.mask_b[by - self.patch_w // 2:by + self.patch_w // 2 + 1, bx - self.patch_w // 2:bx + self.patch_w // 2 + 1]
             ssd = np.where(mask_patch_b == 0, self.MAX_RGB_DIFF, ssd)
 
         return np.sum(ssd)
@@ -128,7 +138,7 @@ class NNF:
         """
         d = self.patch_distance(ax, ay, bx_new, by_new)
         if d < d_best:
-            self.nnf[ay, ax] = (bx_new, by_new)
+            self.nnf[ay, ax] = (by_new, bx_new)
             self.nnf_dist[ay, ax] = d
     
     def propagate(self, iter_num, ax, ay, x_change, y_change):
@@ -139,16 +149,16 @@ class NNF:
         # x_best, y_best = self.nnf[ay, ax]
         d_best = self.nnf_dist[ay, ax]
 
-        if 0 <= ax - x_change < self.aew:
-            x_prop, y_prop = self.nnf[ay, ax - x_change]
+        if 0 <= ax - x_change < self.aw:
+            y_prop, x_prop = self.nnf[ay, ax - x_change]
             x_prop += x_change
-            if 0 <= x_prop < self.bew:
+            if 0 <= x_prop < self.bw:
                 self.improve_guess(ax, ay, d_best, x_prop, y_prop)
 
-        if 0 <= ay - y_change < self.aeh:
-            x_prop, y_prop = self.nnf[ay - y_change, ax]
+        if 0 <= ay - y_change < self.ah:
+            y_prop, x_prop = self.nnf[ay - y_change, ax]
             y_prop += y_change
-            if 0 <= y_prop < self.beh:
+            if 0 <= y_prop < self.bh:
                 self.improve_guess(ax, ay, d_best, x_prop, y_prop)            
 
 
@@ -162,14 +172,17 @@ class NNF:
 
         while mag >= 1:
             # strt = time()
-            x_best, y_best = self.nnf[ay, ax]
+            y_best, x_best = self.nnf[ay, ax]
             d_best = self.nnf_dist[ay, ax]
             
             x_min = max(x_best - mag, 0)
-            x_max = min(x_best + mag + 1, self.bew)
+            x_max = min(x_best + mag + 1, self.bw)
             y_min = max(y_best - mag, 0)
-            y_max = min(y_best + mag + 1, self.beh)
+            y_max = min(y_best + mag + 1, self.bh)
 
+            if x_min == x_max or y_min == y_max:
+                mag = mag // 2
+                continue
             x_rand = random.randint(x_min, x_max - 1)
             y_rand = random.randint(y_min, y_max - 1)
 
@@ -185,10 +198,10 @@ class NNF:
         for iter_num in range(self.pm_iters):
             t_start = time()
             y_start = 0
-            y_end = self.aeh
+            y_end = self.ah
             y_change = 1
             x_start = 0
-            x_end = self.aew
+            x_end = self.aw
             x_change = 1
 
             if iter_num % 2 == 1:
