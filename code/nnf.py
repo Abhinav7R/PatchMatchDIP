@@ -34,6 +34,9 @@ class NNF:
         self.pm_iters = pm_iters
         self.rs_max = rs_max
         self.nnf_init = nnf_init
+
+        self.MAX_RGB_DIFF = 255 * 255 * 3
+        self.MAX_PATCH_DIFF = self.MAX_RGB_DIFF * patch_w * patch_w
         
         # Convert to int32 for precise calculations
         self.a = a.astype(np.int32)
@@ -108,8 +111,16 @@ class NNF:
         """
         patch_a = self.a[ay:ay + self.patch_w, ax:ax + self.patch_w]
         patch_b = self.b[by:by + self.patch_w, bx:bx + self.patch_w]
-        ans = np.sum((patch_a - patch_b) ** 2)
-        return ans
+        ssd = np.sum((patch_a - patch_b) ** 2, axis=2)
+        if self.mask_a is not None:
+            mask_patch_a = self.mask_a[ay:ay + self.patch_w, ax:ax + self.patch_w]
+            ssd = np.where(mask_patch_a == 0, self.MAX_RGB_DIFF, ssd)
+
+        if self.mask_b is not None:
+            mask_patch_b = self.mask_b[by:by + self.patch_w, bx:bx + self.patch_w]
+            ssd = np.where(mask_patch_b == 0, self.MAX_RGB_DIFF, ssd)
+
+        return np.sum(ssd)
     
     def improve_guess(self, ax, ay, d_best, bx_new, by_new):
         """
