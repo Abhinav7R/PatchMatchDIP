@@ -117,7 +117,7 @@ class NNF:
         Measure distance between 2 patches with center at (ay, ax) and (by, bx)
         """
         if self._in_border(ax, ay) or self._in_border(bx, by):
-            return self.MAX_PATCH_DIFF
+            return 0
         patch_a = self.a[ay - self.patch_w // 2:ay + self.patch_w // 2 + 1, ax - self.patch_w // 2:ax + self.patch_w // 2 + 1]
         patch_b = self.b[by - self.patch_w // 2:by + self.patch_w // 2 + 1, bx - self.patch_w // 2:bx + self.patch_w // 2 + 1]
         
