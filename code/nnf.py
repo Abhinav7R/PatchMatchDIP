@@ -9,7 +9,10 @@ Output: NNF (nearest neighbor field)
 2. a 2D array of size (h, w) where h and w are the height and width of the image
 - NNF[i, j] = d where d is the distance (rgb squared distance) between pixel (i, j) and its nearest neighbor in the other image
 
-NOTE: All coordinates are in (y, x) - height, width format
+NOTE: 
+All coordinates are in (y, x) - height, width format
+We assume the size of the target is at least the size of the source image
+We also assume that the patch size is odd
 """
 
 from time import time
