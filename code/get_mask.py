@@ -1,8 +1,10 @@
 import cv2
 import numpy as np
 
+image_name = 'watermark.png'
+
 # Load your image
-image = cv2.imread('../images/green.jpg')  
+image = cv2.imread('../images/' + image_name)
 # image = cv2.resize(image, (800, 600))
 mask = np.zeros(image.shape[:2], dtype=np.uint8)  
 drawing = False
@@ -37,5 +39,6 @@ while True:
         break
 
 # Save mask
-cv2.imwrite('../images/green_mask.png', np.where(mask > 127, 0, 255))
+extension = image_name[-4:]
+cv2.imwrite('../images/' + image_name[:-4] + '_mask' + extension, np.where(mask > 127, 0, 255))
 cv2.destroyAllWindows()
