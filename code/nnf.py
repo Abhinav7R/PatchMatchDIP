@@ -18,7 +18,7 @@ import random
 INF = np.inf
 
 class NNF:
-    def __init__(self, a, b, patch_w=7, pm_iters=5, rs_max=INF, nnf_init="Random"):
+    def __init__(self, a, b, mask_a=None, mask_b=None, patch_w=7, pm_iters=5, rs_max=INF, nnf_init="Random"):
         """
         Initialize the NNF class
         Parameters:
@@ -38,6 +38,8 @@ class NNF:
         # Convert to int32 for precise calculations
         self.a = a.astype(np.int32)
         self.b = b.astype(np.int32)
+        self.mask_a = mask_a
+        self.mask_b = mask_b
 
         self._set_height_width()
         
@@ -75,7 +77,7 @@ class NNF:
         Initialize the NNF with another NNF and calculate initial distances
         """
         # upsample the other NNF by 2 using cv2.resize
-        other_nnf = other_nnf.astype(np.float32)
+        other_nnf = other_nnf.astype(np.float32) * 2
         other_nnf_upsampled = cv2.resize(other_nnf, (self.aw, self.ah))
         other_nnf_upsampled = other_nnf_upsampled.astype(np.int32)
         self.nnf = other_nnf_upsampled.copy()
@@ -107,7 +109,6 @@ class NNF:
         patch_a = self.a[ay:ay + self.patch_w, ax:ax + self.patch_w]
         patch_b = self.b[by:by + self.patch_w, bx:bx + self.patch_w]
         ans = np.sum((patch_a - patch_b) ** 2)
-
         return ans
     
     def improve_guess(self, ax, ay, d_best, bx_new, by_new):
