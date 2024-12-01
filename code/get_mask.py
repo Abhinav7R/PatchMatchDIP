@@ -1,7 +1,7 @@
 import cv2
 import numpy as np
 
-image_name = 'photo_bomb.jpg'
+image_name = 'a.png'
 
 # Load your image
 image = cv2.imread('../images/' + image_name)
