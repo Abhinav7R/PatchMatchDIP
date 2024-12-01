@@ -91,7 +91,7 @@ Propagation is a key step where good offset estimates are transferred to neighbo
 Mathematically, this process can be described as:
 
 $$
-f(x, y) = \arg \min_{v} \left\{ D(f(x, y)), D(f(x-1, y)), D(f(x, y-1)) \right\}
+f(x, y) = \arg \min_{v} \{ D(f(x, y)), D(f(x-1, y)), D(f(x, y-1)) \}
 $$
 
 Here, $D(f(x,y))$ represents the error (or distance) between the patch at position $(x,y)$ in image $A$ and the patch at position $f(x,y)$ in image $B$ defined as the squared RGB distance between the two patches. This step ensures that regions of the image that have already been matched correctly will propagate these matches to their neighbours.
